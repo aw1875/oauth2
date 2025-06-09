@@ -85,7 +85,7 @@ fn handleLogin(app: *App, _: *httpz.Request, res: *httpz.Response) !void {
     try res.setCookie("example.goc", code_verifier, .{ .path = "/", .secure = true, .http_only = true, .max_age = 60 * 5 }); // Google OAuth "Code Verifier" cookie
 
     res.headers.add("Location", url);
-    res.setStatus(.permanent_redirect);
+    res.setStatus(.found);
 }
 
 fn handleCallback(app: *App, req: *httpz.Request, res: *httpz.Response) !void {
@@ -170,7 +170,7 @@ fn handleLogin(app: *App, _: *httpz.Request, res: *httpz.Response) !void {
     try res.setCookie("example.goc", code_verifier, .{ .path = "/", .secure = true, .http_only = true, .max_age = 60 * 5 }); // Google OAuth "Code Verifier" cookie
 
     res.headers.add("Location", url);
-    res.setStatus(.permanent_redirect);
+    res.setStatus(.found);
 }
 
 fn handleCallback(app: *App, req: *httpz.Request, res: *httpz.Response) !void {
