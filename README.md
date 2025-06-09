@@ -21,6 +21,7 @@ exe.root_module.addImport("oauth2", oauth2.module("oauth2"));
 
 This is a work in progress, but currently supports the following providers:
 - [Discord](https://discord.com/developers/docs/topics/oauth2)
+- [GitHub](https://docs.github.com/en/developers/apps/building-oauth-apps/authorizing-oauth-apps)
 - [Google](https://developers.google.com/identity/protocols/oauth2)
 - [LinkedIn](https://docs.microsoft.com/en-us/linkedin/shared/authentication/authorization-code-flow)
 
@@ -233,21 +234,23 @@ fn getUserProfile(allocator: std.mem.Allocator, url: []const u8, access_token: [
     var http_client = std.http.Client{ .allocator = allocator };
     defer http_client.deinit();
 
-    var server_header_buffer: [1024 * 1024 * 4]u8 = undefined;
-    var req = try http_client.open(.GET, try std.Uri.parse(url), .{ .server_header_buffer = &server_header_buffer });
-    defer req.deinit();
+    var response_storage = std.ArrayList(u8).init(allocator);
+    defer response_storage.deinit();
 
-    req.headers.accept_encoding = .{ .override = "application/json" };
-    req.extra_headers = &[_]std.http.Header{.{ .name = "Authorization", .value = try std.fmt.allocPrint(allocator, "Bearer {s}", .{access_token}) }};
+    const response = try http_client.fetch(.{
+        .location = .{ .url = url },
+        .method = .GET,
+        .headers = .{
+            .authorization = .{ .override = try std.fmt.allocPrint(allocator, "Bearer {s}", .{access_token}) },
+        },
+        .extra_headers = &[_]std.http.Header{
+            .{ .name = "User-Agent", .value = "oauth2.zig" },
+            .{ .name = "Accept", .value = "application/json" },
+        },
+        .response_storage = .{ .dynamic = &response_storage },
+    });
 
-    try req.send();
-    try req.finish();
-    try req.wait();
-
-    if (req.response.status != .ok) return error.HttpError;
-
-    const response_data = try req.reader().readAllAlloc(allocator, 1024 * 1024 * 4);
-    defer allocator.free(response_data);
+    if (response.status != .ok) return error.HttpError;
 
     return try std.json.parseFromSlice(GoogleUserProfile, allocator, response_data, .{ .allocate = .alloc_always, .ignore_unknown_fields = true });
 }

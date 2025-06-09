@@ -5,6 +5,7 @@ pub const generateStateOrCodeVerifier = @import("crypto.zig").generateStateOrCod
 
 // OAuth2 Providers
 pub const DiscordProvider = @import("oauth2/providers/discord.zig");
+pub const GitHubProvider = @import("oauth2/providers/github.zig");
 pub const GoogleProvider = @import("oauth2/providers/google.zig");
 pub const LinkedInProvider = @import("oauth2/providers/linkedin.zig");
 

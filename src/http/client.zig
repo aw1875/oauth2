@@ -17,28 +17,29 @@ pub fn deinit(self: *HttpClient) void {
 }
 
 pub fn post(self: *HttpClient, comptime R: type, url: []const u8, body_data: []const u8, auth: []const u8) !if (R == void) std.http.Status else std.json.Parsed(R) {
-    var server_header_buffer: [1024 * 1024 * 4]u8 = undefined;
-    var req = try self._client.open(.POST, try std.Uri.parse(url), .{ .server_header_buffer = &server_header_buffer });
-    defer req.deinit();
+    var response_storage = std.ArrayList(u8).init(self.allocator);
+    defer response_storage.deinit();
 
-    req.headers.content_type = .{ .override = "application/x-www-form-urlencoded" };
-    req.transfer_encoding = .{ .content_length = body_data.len };
-    req.headers.accept_encoding = .{ .override = "application/json" };
-    req.extra_headers = &[_]std.http.Header{.{ .name = "Authorization", .value = auth }};
+    const response = try self._client.fetch(.{
+        .location = .{ .url = url },
+        .method = .POST,
+        .headers = .{
+            .authorization = .{ .override = auth },
+            .content_type = .{ .override = "application/x-www-form-urlencoded" },
+        },
+        .payload = body_data,
+        .extra_headers = &[_]std.http.Header{
+            .{ .name = "User-Agent", .value = "oauth2.zig" },
+            .{ .name = "Accept", .value = "application/json" },
+        },
+        .response_storage = .{ .dynamic = &response_storage },
+    });
 
-    try req.send();
-    try req.writeAll(body_data);
-    try req.finish();
-    try req.wait();
-
-    if (R == void) return req.response.status;
-    if (req.response.status != .ok) {
-        std.log.scoped(.oauth2).err("HTTP request failed with reason: {s}", .{req.response.reason});
+    if (R == void) return response.status;
+    if (response.status != .ok) {
+        std.log.scoped(.oauth2).err("HTTP request failed with reason: {s}", .{response.status.phrase() orelse "Unknown error"});
         return error.HttpError;
     }
 
-    const response_data = try req.reader().readAllAlloc(self.allocator, 1024 * 1024 * 4);
-    defer self.allocator.free(response_data);
-
-    return try std.json.parseFromSlice(R, self.allocator, response_data, .{ .allocate = .alloc_always, .ignore_unknown_fields = true });
+    return try std.json.parseFromSlice(R, self.allocator, response_storage.items, .{ .allocate = .alloc_always, .ignore_unknown_fields = true });
 }
