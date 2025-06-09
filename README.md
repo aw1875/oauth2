@@ -197,3 +197,67 @@ pub const GoogleTokenResponse = struct {
     id_token: []const u8,
 };
 ```
+
+#### Getting the user's profile
+
+This example will take our first example with [GoogleProvider](#googleprovider) one step further by getting and returning the user's profile:
+
+```zig
+...everything from our first example
+
+fn handleCallback(app: *App, req: *httpz.Request, res: *httpz.Response) !void {
+    const query = try req.query();
+
+    if (query.get("error") != null) {
+        std.debug.print("OAuth error: {s}\n", .{query.get("error").?});
+        return res.setStatus(.internal_server_error);
+    }
+
+    const code = query.get("code") orelse return res.setStatus(.internal_server_error); // Missing code parameter
+    const state = query.get("state") orelse return res.setStatus(.internal_server_error); // Missing state parameter
+    const state_cookie = req.cookies().get("example_app.gos") orelse return res.setStatus(.bad_request); // Missing state cookie
+    const code_verifier_cookie = req.cookies().get("example_app.goc") orelse return res.setStatus(.bad_request); // Missing code verifier cookie
+    if (!std.mem.eql(u8, state, state_cookie)) return res.setStatus(.bad_request); // State mismatch
+
+    const tokens = try app.oauth.validateAuthorizationCode(res.arena, code, code_verifier_cookie);
+    const user_profile = try getUserProfile(res.arena, "https://www.googleapis.com/oauth2/v3/userinfo", tokens.access_token);
+    defer user_profile.deinit();
+
+    return res.json(user_profile.value, .{});
+}
+
+// Adding this helper function to reach out to Google using the provided bearer token (our access_token)
+fn getUserProfile(allocator: std.mem.Allocator, url: []const u8, access_token: []const u8) !std.json.Parsed(GoogleUserProfile) {
+    var http_client = std.http.Client{ .allocator = allocator };
+    defer http_client.deinit();
+
+    var server_header_buffer: [1024 * 1024 * 4]u8 = undefined;
+    var req = try http_client.open(.GET, try std.Uri.parse(url), .{ .server_header_buffer = &server_header_buffer });
+    defer req.deinit();
+
+    req.headers.accept_encoding = .{ .override = "application/json" };
+    req.extra_headers = &[_]std.http.Header{.{ .name = "Authorization", .value = try std.fmt.allocPrint(allocator, "Bearer {s}", .{access_token}) }};
+
+    try req.send();
+    try req.finish();
+    try req.wait();
+
+    if (req.response.status != .ok) return error.HttpError;
+
+    const response_data = try req.reader().readAllAlloc(allocator, 1024 * 1024 * 4);
+    defer allocator.free(response_data);
+
+    return try std.json.parseFromSlice(GoogleUserProfile, allocator, response_data, .{ .allocate = .alloc_always, .ignore_unknown_fields = true });
+}
+
+// An example of the Goole Profile structure
+const GoogleUserProfile = struct {
+    sub: []const u8,
+    email: []const u8,
+    email_verified: bool,
+    name: []const u8,
+    given_name: []const u8,
+    family_name: []const u8,
+    picture: []const u8,
+};
+```
