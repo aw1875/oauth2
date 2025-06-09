@@ -29,6 +29,8 @@ The BaseOAuth2Provider is also exposed, which allows you to create your own cust
 ## Examples
 
 All examples will use [http.zig](https://github.com/karlseguin/http.zig) as our server. The same logic can be applied anywhere though.
+Please note that the examples don't handle any memory cleanup because we're letting httpz's response arena allocator handle all allocations and deallocations.
+If your use case differs, you will want to handle deallocation appropriately to avoid memory leaks.
 
 #### GoogleProvider
 
@@ -121,7 +123,7 @@ const CustomProvider = oauth2.BaseOAuth2Provider;
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    defer if (gpa.deinit() != .ok) @panic("Failed to deinitialize allocator");
 
     var oauth2_provider = try CustomProvider.init(allocator, .{
         .client_id = "<google_client_id>",
