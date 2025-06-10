@@ -20,6 +20,8 @@ exe.root_module.addImport("oauth2", oauth2.module("oauth2"));
 ## Supported Providers
 
 This is a work in progress, but currently supports the following providers:
+- [BattleNet](https://develop.battle.net/documentation/guides/using-oauth)
+- [Coinbase](https://docs.cdp.coinbase.com/coinbase-app/docs/auth/oauth-integration)
 - [Discord](https://discord.com/developers/docs/topics/oauth2)
 - [GitHub](https://docs.github.com/en/developers/apps/building-oauth-apps/authorizing-oauth-apps)
 - [Google](https://developers.google.com/identity/protocols/oauth2)
@@ -255,7 +257,7 @@ fn getUserProfile(allocator: std.mem.Allocator, url: []const u8, access_token: [
     return try std.json.parseFromSlice(GoogleUserProfile, allocator, response_data, .{ .allocate = .alloc_always, .ignore_unknown_fields = true });
 }
 
-// An example of the Goole Profile structure
+// An example of the Google Profile structure
 const GoogleUserProfile = struct {
     sub: []const u8,
     email: []const u8,
