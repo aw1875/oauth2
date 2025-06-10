@@ -1,6 +1,6 @@
 .{
     .name = .oauth2,
-    .version = "0.0.0",
+    .version = "0.0.1",
     .fingerprint = 0x86d862dc1f53c689,
     .minimum_zig_version = "0.14.1",
     .dependencies = .{},
