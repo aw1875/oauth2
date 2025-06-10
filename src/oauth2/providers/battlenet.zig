@@ -3,24 +3,22 @@ const std = @import("std");
 const OAuth2Provider = @import("../oauth2.zig");
 const OAuth2ProviderArgs = OAuth2Provider.OAuth2ProviderArgs;
 
-const AUTHORIZATION_ENDPOINT = "https://discord.com/oauth2/authorize";
-const TOKEN_ENDPOINT = "https://discord.com/api/oauth2/token";
-const TOKEN_REVOCATION_ENDPOINT = "https://discord.com/api/oauth2/token/revoke";
+const AUTHORIZATION_ENDPOINT = "https://oauth.battle.net/authorize";
+const TOKEN_ENDPOINT = "https://oauth.battle.net/token";
 
-pub const DiscordTokenResponse = struct {
-    token_type: []const u8,
+pub const BattleNetTokenResponse = struct {
     access_token: []const u8,
+    token_type: []const u8,
     expires_in: i64,
-    refresh_token: []const u8,
     scope: []const u8,
 };
 
-const DiscordProvider = @This();
+const BattleNetProvider = @This();
 
 oauth2_provider: OAuth2Provider,
 
-pub fn init(allocator: std.mem.Allocator, args: OAuth2ProviderArgs) !DiscordProvider {
-    return DiscordProvider{
+pub fn init(allocator: std.mem.Allocator, args: OAuth2ProviderArgs) !BattleNetProvider {
+    return BattleNetProvider{
         .oauth2_provider = try OAuth2Provider.init(allocator, .{
             .client_id = args.client_id,
             .client_secret = args.client_secret,
@@ -29,12 +27,12 @@ pub fn init(allocator: std.mem.Allocator, args: OAuth2ProviderArgs) !DiscordProv
     };
 }
 
-pub fn deinit(self: *DiscordProvider) void {
+pub fn deinit(self: *BattleNetProvider) void {
     self.oauth2_provider.deinit();
 }
 
 pub fn createAuthorizationUrl(
-    self: *const DiscordProvider,
+    self: *const BattleNetProvider,
     allocator: std.mem.Allocator,
     state: []const u8,
     scopes: []const []const u8,
@@ -48,12 +46,12 @@ pub fn createAuthorizationUrl(
 }
 
 pub fn validateAuthorizationCode(
-    self: *const DiscordProvider,
+    self: *const BattleNetProvider,
     allocator: std.mem.Allocator,
     code: []const u8,
-) !DiscordTokenResponse {
+) !BattleNetTokenResponse {
     return self.oauth2_provider.validateAuthorizationCode(
-        DiscordTokenResponse,
+        BattleNetTokenResponse,
         allocator,
         TOKEN_ENDPOINT,
         code,
@@ -62,26 +60,14 @@ pub fn validateAuthorizationCode(
 }
 
 pub fn refreshAccessToken(
-    self: *const DiscordProvider,
+    self: *const BattleNetProvider,
     allocator: std.mem.Allocator,
     refresh_token: []const u8,
-) !DiscordTokenResponse {
+) !BattleNetTokenResponse {
     return self.oauth2_provider.refreshAccessToken(
-        DiscordTokenResponse,
+        BattleNetTokenResponse,
         allocator,
         TOKEN_ENDPOINT,
         refresh_token,
-    );
-}
-
-pub fn revokeAccessToken(
-    self: *const DiscordProvider,
-    allocator: std.mem.Allocator,
-    access_token: []const u8,
-) !void {
-    return self.oauth2_provider.revokeAccessToken(
-        allocator,
-        TOKEN_REVOCATION_ENDPOINT,
-        access_token,
     );
 }
