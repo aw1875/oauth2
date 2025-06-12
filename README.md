@@ -47,7 +47,7 @@ const GoogleProvider = oauth2.GoogleProvider;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
     defer if (gpa.deinit() != .ok) @panic("Failed to deinitialize allocator");
 
     var oauth2_provider = try GoogleProvider.init(allocator, .{
@@ -125,7 +125,7 @@ const CustomProvider = oauth2.BaseOAuth2Provider;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
     defer if (gpa.deinit() != .ok) @panic("Failed to deinitialize allocator");
 
     var oauth2_provider = try CustomProvider.init(allocator, .{
