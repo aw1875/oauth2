@@ -6,7 +6,6 @@ pub fn urlEncode(allocator: std.mem.Allocator, input: []const u8, mode: enum { u
 
     for (input) |c| {
         switch (c) {
-            // 'a'...'z', 'A'...'Z', '0'...'9', '-', '_', '.', '~' => try out.writer().writeByte(c),
             'a'...'z', 'A'...'Z', '0'...'9', '-', '_', '.', '~' => try out.append(allocator, c),
             ' ' => switch (mode) {
                 .url => try out.print(allocator, "%{X:0>2}", .{c}),

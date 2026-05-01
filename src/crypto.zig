@@ -1,9 +1,9 @@
 const std = @import("std");
 const crypto = std.crypto;
 
-pub fn createStateNonce(allocator: std.mem.Allocator) ![]const u8 {
+pub fn createStateNonce(io: std.Io, allocator: std.mem.Allocator) ![]const u8 {
     var rng: [32]u8 = undefined;
-    crypto.random.bytes(&rng);
+    io.random(&rng);
 
     const result = try allocator.alloc(u8, std.base64.url_safe_no_pad.Encoder.calcSize(rng.len));
     _ = std.base64.url_safe_no_pad.Encoder.encode(result, &rng);

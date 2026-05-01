@@ -2,13 +2,15 @@ const std = @import("std");
 
 const HttpClient = @This();
 
+io: std.Io,
 allocator: std.mem.Allocator,
 _client: std.http.Client,
 
-pub fn init(allocator: std.mem.Allocator) !HttpClient {
+pub fn init(io: std.Io, allocator: std.mem.Allocator) !HttpClient {
     return .{
+        .io = io,
         .allocator = allocator,
-        ._client = std.http.Client{ .allocator = allocator },
+        ._client = std.http.Client{ .allocator = allocator, .io = io },
     };
 }
 
