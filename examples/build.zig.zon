@@ -2,7 +2,7 @@
     .name = .oauth2_examples,
     .version = "0.0.0",
     .fingerprint = 0x652847298b0c114a,
-    .minimum_zig_version = "0.14.1",
+    .minimum_zig_version = "0.15.2",
     .dependencies = .{
         .httpz = .{
             .url = "git+https://github.com/karlseguin/http.zig#1c0ec3751c53e276d5e0c42b6d5481e72d9d1971",
