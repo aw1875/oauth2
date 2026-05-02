@@ -7,7 +7,7 @@ const GitHubProvider = oauth2.GitHubProvider;
 
 const SessionData = struct {
     state: []const u8,
-    expires_at: i128,
+    expires_at: i64,
 };
 
 pub fn main(init: std.process.Init) !void {
@@ -53,7 +53,7 @@ fn handleLogin(app: *App, _: *httpz.Request, res: *httpz.Response) !void {
     const session_id = try oauth2.createStateNonce(app.io, res.arena);
     try app.session_store.put(session_id, SessionData{
         .state = state,
-        .expires_at = @intCast(std.Io.Clock.now(.real, app.io).nanoseconds + (60 * 5 * 1000 * std.time.ns_per_ms)), // 5 minutes
+        .expires_at = @intCast(std.Io.Clock.now(.real, app.io).toMilliseconds() + (60 * 5 * 1000)), // 5 minutes
     });
 
     try res.setCookie("example.sid", session_id, .{ .path = "/", .secure = true, .http_only = true, .max_age = 60 * 5 }); // Session ID cookie
@@ -92,7 +92,7 @@ fn handleCallback(app: *App, req: *httpz.Request, res: *httpz.Response) !void {
         return res.setStatus(.bad_request);
     };
 
-    if (std.Io.Clock.now(.real, app.io).nanoseconds > session_data.value.expires_at) {
+    if (std.Io.Clock.now(.real, app.io).toMilliseconds() > session_data.value.expires_at) {
         std.log.err("Session expired for ID: {s}", .{session_id});
         return res.setStatus(.unauthorized);
     }
@@ -105,7 +105,6 @@ fn handleCallback(app: *App, req: *httpz.Request, res: *httpz.Response) !void {
     const tokens = try app.github.validateAuthorizationCode(res.arena, code);
 
     const user_profile = try getUserProfile(app.io, res.arena, "https://api.github.com/user", tokens.access_token);
-    defer user_profile.deinit();
 
     return res.json(user_profile.value, .{});
 }
