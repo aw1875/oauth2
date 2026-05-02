@@ -8,7 +8,7 @@ const GitHubProvider = oauth2.GitHubProvider;
 
 const SessionData = struct {
     state: []const u8,
-    expires_at: u64,
+    expires_at: i64,
 };
 
 const OAuthProvider = enum {
@@ -22,18 +22,17 @@ const TokenResponse = union(enum) {
     github: oauth2.GitHubProvider.GitHubTokenResponse,
 };
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = gpa.allocator();
-    defer if (gpa.deinit() != .ok) @panic("Failed to deinitialize allocator");
+pub fn main(init: std.process.Init) !void {
+    const io = init.io;
+    const allocator = init.gpa;
 
-    var discord_oauth2_provider = try DiscordProvider.init(allocator, .{
+    var discord_oauth2_provider = try DiscordProvider.init(io, allocator, .{
         .client_id = "<your_client_id>",
         .client_secret = "<your_client_secret>",
         .redirect_uri = "http://localhost:3000/api/v1/oauth/discord/callback",
     });
 
-    var github_oauth2_provider = try GitHubProvider.init(allocator, .{
+    var github_oauth2_provider = try GitHubProvider.init(io, allocator, .{
         .client_id = "<your_client_id>",
         .client_secret = "<your_client_secret>",
         .redirect_uri = "http://localhost:3000/api/v1/oauth/github/callback",
@@ -47,12 +46,13 @@ pub fn main() !void {
     }
 
     var app = App{
+        .io = io,
         .discord = &discord_oauth2_provider,
         .github = &github_oauth2_provider,
         .session_store = &session_store,
     };
 
-    var server = try httpz.Server(*App).init(allocator, .{ .port = 3000 }, &app);
+    var server = try httpz.Server(*App).init(io, allocator, .{ .address = .localhost(3000) }, &app);
     defer {
         server.stop();
         server.deinit();
@@ -68,6 +68,7 @@ pub fn main() !void {
 }
 
 const App = struct {
+    io: std.Io,
     discord: *DiscordProvider,
     github: *GitHubProvider,
     session_store: *std.StringHashMap(SessionData),
@@ -83,17 +84,17 @@ fn handleRoot(_: *App, _: *httpz.Request, res: *httpz.Response) !void {
 fn handleLogin(app: *App, req: *httpz.Request, res: *httpz.Response) !void {
     const provider = req.params.get("provider") orelse return res.setStatus(.bad_request);
 
-    const state = try oauth2.createStateNonce(res.arena);
+    const state = try oauth2.createStateNonce(app.io, res.arena);
     const url = switch (std.meta.stringToEnum(OAuthProvider, provider) orelse OAuthProvider.unknown) {
         .discord => try app.discord.createAuthorizationUrl(res.arena, state, &[_][]const u8{ "identify", "email" }),
         .github => try app.github.createAuthorizationUrl(res.arena, state, &[_][]const u8{ "read:user", "user:email" }),
         .unknown => return res.setStatus(.not_found),
     };
 
-    const session_id = try oauth2.createStateNonce(res.arena);
+    const session_id = try oauth2.createStateNonce(app.io, res.arena);
     try app.session_store.put(session_id, SessionData{
         .state = state,
-        .expires_at = @intCast(std.time.milliTimestamp() + (60 * 5 * 1000)), // 5 minutes
+        .expires_at = @intCast(std.Io.Clock.now(.real, app.io).toMilliseconds() + (60 * 5 * 1000)), // 5 minutes
     });
 
     try res.setCookie("example.sid", session_id, .{ .path = "/", .secure = true, .http_only = true, .max_age = 60 * 5 }); // Session ID cookie
@@ -133,7 +134,7 @@ fn handleCallback(app: *App, req: *httpz.Request, res: *httpz.Response) !void {
         return res.setStatus(.bad_request);
     };
 
-    if (std.time.milliTimestamp() > session_data.value.expires_at) {
+    if (std.Io.Clock.now(.real, app.io).toMilliseconds() > session_data.value.expires_at) {
         std.log.err("Session expired for ID: {s}", .{session_id});
         return res.setStatus(.unauthorized);
     }
@@ -150,17 +151,16 @@ fn handleCallback(app: *App, req: *httpz.Request, res: *httpz.Response) !void {
     };
 
     const user_profile = switch (std.meta.stringToEnum(OAuthProvider, provider) orelse OAuthProvider.unknown) {
-        .discord => try getUserProfile(res.arena, "https://discord.com/api/users/@me", tokens.discord.access_token),
-        .github => try getUserProfile(res.arena, "https://api.github.com/user", tokens.github.access_token),
+        .discord => try getUserProfile(app.io, res.arena, "https://discord.com/api/users/@me", tokens.discord.access_token),
+        .github => try getUserProfile(app.io, res.arena, "https://api.github.com/user", tokens.github.access_token),
         .unknown => return res.setStatus(.not_found),
     };
-    defer user_profile.deinit();
 
     return res.json(user_profile.value, .{});
 }
 
-fn getUserProfile(allocator: std.mem.Allocator, url: []const u8, access_token: []const u8) !std.json.Parsed(std.json.Value) {
-    var http_client = std.http.Client{ .allocator = allocator };
+fn getUserProfile(io: std.Io, allocator: std.mem.Allocator, url: []const u8, access_token: []const u8) !std.json.Parsed(std.json.Value) {
+    var http_client = std.http.Client{ .allocator = allocator, .io = io };
     defer http_client.deinit();
 
     var body_writer: std.Io.Writer.Allocating = .init(allocator);

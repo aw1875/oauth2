@@ -17,9 +17,9 @@ redirect_uri: []const u8,
 
 const OAuth2Provider = @This();
 
-pub fn init(allocator: std.mem.Allocator, args: OAuth2ProviderArgs) !OAuth2Provider {
+pub fn init(io: std.Io, allocator: std.mem.Allocator, args: OAuth2ProviderArgs) !OAuth2Provider {
     const http_client = try allocator.create(HttpClient);
-    http_client.* = try HttpClient.init(allocator);
+    http_client.* = try HttpClient.init(io, allocator);
 
     return OAuth2Provider{
         .client = http_client,

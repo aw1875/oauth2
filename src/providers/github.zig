@@ -16,9 +16,9 @@ const GitHubProvider = @This();
 
 oauth2_provider: OAuth2Provider,
 
-pub fn init(allocator: std.mem.Allocator, args: OAuth2ProviderArgs) !GitHubProvider {
+pub fn init(io: std.Io, allocator: std.mem.Allocator, args: OAuth2ProviderArgs) !GitHubProvider {
     return GitHubProvider{
-        .oauth2_provider = try OAuth2Provider.init(allocator, .{
+        .oauth2_provider = try OAuth2Provider.init(io, allocator, .{
             .client_id = args.client_id,
             .client_secret = args.client_secret,
             .redirect_uri = args.redirect_uri,

@@ -7,15 +7,14 @@ const LinkedInProvider = oauth2.LinkedInProvider;
 
 const SessionData = struct {
     state: []const u8,
-    expires_at: u64,
+    expires_at: i64,
 };
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = gpa.allocator();
-    defer if (gpa.deinit() != .ok) @panic("Failed to deinitialize allocator");
+pub fn main(init: std.process.Init) !void {
+    const io = init.io;
+    const allocator = init.gpa;
 
-    var oauth2_provider = try LinkedInProvider.init(allocator, .{
+    var oauth2_provider = try LinkedInProvider.init(io, allocator, .{
         .client_id = "<your_client_id>",
         .client_secret = "<your_client_secret>",
         .redirect_uri = "http://localhost:3000/api/v1/oauth/linkedin/callback",
@@ -25,9 +24,9 @@ pub fn main() !void {
     var session_store = std.StringHashMap(SessionData).init(allocator);
     defer session_store.deinit();
 
-    var app = App{ .linkedin = &oauth2_provider, .session_store = &session_store };
+    var app = App{ .io = io, .linkedin = &oauth2_provider, .session_store = &session_store };
 
-    var server = try httpz.Server(*App).init(allocator, .{ .port = 3000 }, &app);
+    var server = try httpz.Server(*App).init(io, allocator, .{ .address = .localhost(3000) }, &app);
     defer {
         server.stop();
         server.deinit();
@@ -42,18 +41,19 @@ pub fn main() !void {
 }
 
 const App = struct {
+    io: std.Io,
     linkedin: *LinkedInProvider,
     session_store: *std.StringHashMap(SessionData),
 };
 
 fn handleLogin(app: *App, _: *httpz.Request, res: *httpz.Response) !void {
-    const state = try oauth2.createStateNonce(res.arena);
+    const state = try oauth2.createStateNonce(app.io, res.arena);
     const url = try app.linkedin.createAuthorizationUrl(res.arena, state, &[_][]const u8{ "email", "profile", "openid" });
 
-    const session_id = try oauth2.createStateNonce(res.arena);
+    const session_id = try oauth2.createStateNonce(app.io, res.arena);
     try app.session_store.put(session_id, SessionData{
         .state = state,
-        .expires_at = @intCast(std.time.milliTimestamp() + (60 * 5 * 1000)), // 5 minutes
+        .expires_at = @intCast(std.Io.Clock.now(.real, app.io).toMilliseconds() + (60 * 5 * 1000)), // 5 minutes
     });
 
     try res.setCookie("example.sid", session_id, .{ .path = "/", .secure = true, .http_only = true, .max_age = 60 * 5 }); // Session ID cookie
@@ -92,7 +92,7 @@ fn handleCallback(app: *App, req: *httpz.Request, res: *httpz.Response) !void {
         return res.setStatus(.bad_request);
     };
 
-    if (std.time.milliTimestamp() > session_data.value.expires_at) {
+    if (std.Io.Clock.now(.real, app.io).toMilliseconds() > session_data.value.expires_at) {
         std.log.err("Session expired for ID: {s}", .{session_id});
         return res.setStatus(.unauthorized);
     }
@@ -104,14 +104,13 @@ fn handleCallback(app: *App, req: *httpz.Request, res: *httpz.Response) !void {
 
     const tokens = try app.linkedin.validateAuthorizationCode(res.arena, code);
 
-    const user_profile = try getUserProfile(res.arena, "https://api.linkedin.com/v2/userinfo", tokens.access_token);
-    defer user_profile.deinit();
+    const user_profile = try getUserProfile(app.io, res.arena, "https://api.linkedin.com/v2/userinfo", tokens.access_token);
 
     return res.json(user_profile.value, .{});
 }
 
-fn getUserProfile(allocator: std.mem.Allocator, url: []const u8, access_token: []const u8) !std.json.Parsed(std.json.Value) {
-    var http_client = std.http.Client{ .allocator = allocator };
+fn getUserProfile(io: std.Io, allocator: std.mem.Allocator, url: []const u8, access_token: []const u8) !std.json.Parsed(std.json.Value) {
+    var http_client = std.http.Client{ .allocator = allocator, .io = io };
     defer http_client.deinit();
 
     var body_writer: std.Io.Writer.Allocating = .init(allocator);

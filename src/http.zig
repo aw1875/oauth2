@@ -2,13 +2,15 @@ const std = @import("std");
 
 const HttpClient = @This();
 
+io: std.Io,
 allocator: std.mem.Allocator,
 _client: std.http.Client,
 
-pub fn init(allocator: std.mem.Allocator) !HttpClient {
+pub fn init(io: std.Io, allocator: std.mem.Allocator) !HttpClient {
     return .{
+        .io = io,
         .allocator = allocator,
-        ._client = std.http.Client{ .allocator = allocator },
+        ._client = std.http.Client{ .allocator = allocator, .io = io },
     };
 }
 
@@ -50,7 +52,7 @@ pub fn post(self: *HttpClient, comptime R: type, url: []const u8, body_data: []c
 test "HttpClient POST request" {
     const allocator = std.testing.allocator;
 
-    var client = try HttpClient.init(allocator);
+    var client = try HttpClient.init(std.testing.io, allocator);
     defer client.deinit();
 
     const url = "https://postman-echo.com/post";

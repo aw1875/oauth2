@@ -1,9 +1,9 @@
 const std = @import("std");
 const crypto = std.crypto;
 
-pub fn createStateNonce(allocator: std.mem.Allocator) ![]const u8 {
+pub fn createStateNonce(io: std.Io, allocator: std.mem.Allocator) ![]const u8 {
     var rng: [32]u8 = undefined;
-    crypto.random.bytes(&rng);
+    io.random(&rng);
 
     const result = try allocator.alloc(u8, std.base64.url_safe_no_pad.Encoder.calcSize(rng.len));
     _ = std.base64.url_safe_no_pad.Encoder.encode(result, &rng);
@@ -13,7 +13,7 @@ pub fn createStateNonce(allocator: std.mem.Allocator) ![]const u8 {
 
 test "createStateNonce returns 43-character base64url string" {
     const allocator = std.testing.allocator;
-    const result = try createStateNonce(allocator);
+    const result = try createStateNonce(std.testing.io, allocator);
     defer allocator.free(result);
 
     // 32 random bytes => 43 Base64 (url-safe, no padding) characters
@@ -22,7 +22,7 @@ test "createStateNonce returns 43-character base64url string" {
 
 test "createStateNonce returns URL-safe characters only" {
     const allocator = std.testing.allocator;
-    const result = try createStateNonce(allocator);
+    const result = try createStateNonce(std.testing.io, allocator);
     defer allocator.free(result);
 
     for (result) |c| {
@@ -36,10 +36,10 @@ test "createStateNonce returns URL-safe characters only" {
 test "createStateNonce produces different results" {
     const allocator = std.testing.allocator;
 
-    const a = try createStateNonce(allocator);
+    const a = try createStateNonce(std.testing.io, allocator);
     defer allocator.free(a);
 
-    const b = try createStateNonce(allocator);
+    const b = try createStateNonce(std.testing.io, allocator);
     defer allocator.free(b);
 
     try std.testing.expect(!std.mem.eql(u8, a, b));

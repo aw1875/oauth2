@@ -50,15 +50,14 @@ const CustomProvider = oauth2.BaseOAuth2Provider;
 const SessionData = struct {
     state: []const u8,
     code_verifier: []const u8,
-    expires_at: u64,
+    expires_at: i64,
 };
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = gpa.allocator();
-    defer if (gpa.deinit() != .ok) @panic("Failed to deinitialize allocator");
+pub fn main(init: std.process.Init) !void {
+    const io = init.io;
+    const allocator = init.gpa;
 
-    var oauth2_provider = try CustomProvider.init(allocator, .{
+    var oauth2_provider = try CustomProvider.init(io, allocator, .{
         .client_id = "<google_client_id>",
         .client_secret = "<google_client_secret>",
         .redirect_uri = "http://localhost:3000/api/v1/oauth/google/callback",
@@ -68,9 +67,9 @@ pub fn main() !void {
     var session_store = std.StringHashMap(SessionData).init(allocator);
     defer session_store.deinit();
 
-    var app = App{ .oauth = &oauth2_provider, .session_store = &session_store };
+    var app = App{ .io = io, .oauth = &oauth2_provider, .session_store = &session_store };
 
-    var server = try httpz.Server(*App).init(allocator, .{ .port = 3000 }, &app);
+    var server = try httpz.Server(*App).init(io, allocator, .{ .address = .localhost(3000) }, &app);
     defer {
         server.stop();
         server.deinit();
@@ -84,13 +83,14 @@ pub fn main() !void {
 }
 
 const App = struct {
+    io: std.Io,
     oauth: *CustomProvider,
     session_store: *std.StringHashMap(SessionData),
 };
 
 fn handleLogin(app: *App, _: *httpz.Request, res: *httpz.Response) !void {
-    const state = try oauth2.createStateNonce(res.arena);
-    const code_verifier = try oauth2.createStateNonce(res.arena);
+    const state = try oauth2.createStateNonce(app.io, res.arena);
+    const code_verifier = try oauth2.createStateNonce(app.io, res.arena);
     const url = try app.oauth.createAuthorizationUrlWithPKCE(
         res.arena,
         "https://accounts.google.com/o/oauth2/v2/auth",
@@ -100,11 +100,11 @@ fn handleLogin(app: *App, _: *httpz.Request, res: *httpz.Response) !void {
         &[_][]const u8{ "email", "profile", "openid" },
     );
 
-    const session_id = try oauth2.createStateNonce(res.arena);
+    const session_id = try oauth2.createStateNonce(app.io, res.arena);
     try app.session_store.put(session_id, SessionData{
         .state = state,
         .code_verifier = code_verifier,
-        .expires_at = @intCast(std.time.milliTimestamp() + (60 * 5 * 1000)), // 5 minutes
+        .expires_at = @intCast(std.Io.Clock.now(.real, app.io).toMilliseconds() + (60 * 5 * 1000)), // 5 minutes
     });
 
     try res.setCookie("example.sid", session_id, .{ .path = "/", .secure = true, .http_only = true, .max_age = 60 * 5 }); // Session ID cookie
@@ -143,7 +143,7 @@ fn handleCallback(app: *App, req: *httpz.Request, res: *httpz.Response) !void {
         return res.setStatus(.bad_request);
     };
 
-    if (std.time.milliTimestamp() > session_data.value.expires_at) {
+    if (std.Io.Clock.now(.real, app.io).toMilliseconds() > session_data.value.expires_at) {
         std.log.err("Session expired for ID: {s}", .{session_id});
         return res.setStatus(.unauthorized);
     }

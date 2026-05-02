@@ -19,9 +19,9 @@ const DiscordProvider = @This();
 
 oauth2_provider: OAuth2Provider,
 
-pub fn init(allocator: std.mem.Allocator, args: OAuth2ProviderArgs) !DiscordProvider {
+pub fn init(io: std.Io, allocator: std.mem.Allocator, args: OAuth2ProviderArgs) !DiscordProvider {
     return DiscordProvider{
-        .oauth2_provider = try OAuth2Provider.init(allocator, .{
+        .oauth2_provider = try OAuth2Provider.init(io, allocator, .{
             .client_id = args.client_id,
             .client_secret = args.client_secret,
             .redirect_uri = args.redirect_uri,
