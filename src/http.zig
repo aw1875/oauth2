@@ -52,7 +52,7 @@ pub fn post(self: *HttpClient, comptime R: type, url: []const u8, body_data: []c
 test "HttpClient POST request" {
     const allocator = std.testing.allocator;
 
-    var client = try HttpClient.init(allocator);
+    var client = try HttpClient.init(std.testing.io, allocator);
     defer client.deinit();
 
     const url = "https://postman-echo.com/post";

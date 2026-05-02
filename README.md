@@ -69,7 +69,7 @@ pub fn main(init: std.process.Init) !void {
 
     var app = App{ .io = io, .oauth = &oauth2_provider, .session_store = &session_store };
 
-    var server = try httpz.Server(*App).init(allocator, .{ .port = 3000 }, &app);
+    var server = try httpz.Server(*App).init(io, allocator, .{ .address = .localhost(3000) }, &app);
     defer {
         server.stop();
         server.deinit();

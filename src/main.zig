@@ -15,4 +15,5 @@ pub const BaseOAuth2Provider = @import("oauth2.zig");
 test {
     _ = @import("utils.zig");
     _ = @import("crypto.zig");
+    _ = @import("http.zig");
 }
