@@ -1,3 +1,5 @@
+
+
 # oauth2.zig
 
 A light weight oauth2 wrapper for zig. Contains implementations for the authorization code flow with no external dependencies.
@@ -153,7 +155,7 @@ fn handleCallback(app: *App, req: *httpz.Request, res: *httpz.Response) !void {
         return res.setStatus(.bad_request);
     }
 
-    return res.json(try app.oauth.validateAuthorizationCode(GoogleTokenResponse, res.arena, "https://oauth2.googleapis.com/token", code, session.code_verifier), .{});
+    return res.json(try app.oauth.validateAuthorizationCode(GoogleTokenResponse, res.arena, "https://oauth2.googleapis.com/token", code, session_data.value.code_verifier), .{});
 }
 
 // This is the response we expect to get back when validating the authorization code
