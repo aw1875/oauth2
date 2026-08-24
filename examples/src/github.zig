@@ -48,7 +48,7 @@ const App = struct {
 
 fn handleLogin(app: *App, _: *httpz.Request, res: *httpz.Response) !void {
     const state = try oauth2.createStateNonce(app.io, res.arena);
-    const url = try app.github.createAuthorizationUrl(res.arena, state, &[_][]const u8{ "read:user", "user:email" });
+    const url = try app.github.createAuthorizationUrl(res.arena, state, &[_][]const u8{ "read:user", "user:email" }, &.{});
 
     const session_id = try oauth2.createStateNonce(app.io, res.arena);
     try app.session_store.put(session_id, SessionData{
@@ -102,9 +102,10 @@ fn handleCallback(app: *App, req: *httpz.Request, res: *httpz.Response) !void {
         return res.setStatus(.bad_request);
     }
 
-    const tokens = try app.github.validateAuthorizationCode(res.arena, code);
+    var tokens = try app.github.validateAuthorizationCode(res.arena, code, &.{});
+    defer tokens.deinit();
 
-    const user_profile = try getUserProfile(app.io, res.arena, "https://api.github.com/user", tokens.access_token);
+    const user_profile = try getUserProfile(app.io, res.arena, "https://api.github.com/user", tokens.parsed.?.value.access_token);
 
     return res.json(user_profile.value, .{});
 }

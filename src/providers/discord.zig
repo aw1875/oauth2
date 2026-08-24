@@ -2,6 +2,8 @@ const std = @import("std");
 
 const OAuth2Provider = @import("../oauth2.zig");
 const OAuth2ProviderArgs = OAuth2Provider.OAuth2ProviderArgs;
+const Param = OAuth2Provider.Param;
+const Response = @import("../response.zig").Response;
 
 const AUTHORIZATION_ENDPOINT = "https://discord.com/oauth2/authorize";
 const TOKEN_ENDPOINT = "https://discord.com/api/oauth2/token";
@@ -38,12 +40,14 @@ pub fn createAuthorizationUrl(
     allocator: std.mem.Allocator,
     state: []const u8,
     scopes: []const []const u8,
+    extra_params: []const Param,
 ) ![]const u8 {
     return self.oauth2_provider.createAuthorizationUrl(
         allocator,
         AUTHORIZATION_ENDPOINT,
         state,
         scopes,
+        extra_params,
     );
 }
 
@@ -51,13 +55,15 @@ pub fn validateAuthorizationCode(
     self: *const DiscordProvider,
     allocator: std.mem.Allocator,
     code: []const u8,
-) !DiscordTokenResponse {
+    extra_params: []const Param,
+) !Response(DiscordTokenResponse) {
     return self.oauth2_provider.validateAuthorizationCode(
         DiscordTokenResponse,
         allocator,
         TOKEN_ENDPOINT,
         code,
         null,
+        extra_params,
     );
 }
 
@@ -65,12 +71,15 @@ pub fn refreshAccessToken(
     self: *const DiscordProvider,
     allocator: std.mem.Allocator,
     refresh_token: []const u8,
-) !DiscordTokenResponse {
+    extra_params: []const Param,
+) !Response(DiscordTokenResponse) {
     return self.oauth2_provider.refreshAccessToken(
         DiscordTokenResponse,
         allocator,
         TOKEN_ENDPOINT,
         refresh_token,
+        null,
+        extra_params,
     );
 }
 

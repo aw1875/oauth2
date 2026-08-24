@@ -11,9 +11,12 @@ pub const LinkedInProvider = @import("providers/linkedin.zig");
 
 // Base OAuth2 provider for custom implementations
 pub const BaseOAuth2Provider = @import("oauth2.zig");
+pub const Response = @import("response.zig").Response;
 
 test {
     _ = @import("utils.zig");
     _ = @import("crypto.zig");
     _ = @import("http.zig");
+    _ = @import("response.zig");
+    _ = @import("oauth2.zig");
 }

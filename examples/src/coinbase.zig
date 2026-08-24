@@ -50,7 +50,7 @@ const App = struct {
 fn handleLogin(app: *App, _: *httpz.Request, res: *httpz.Response) !void {
     const state = try oauth2.createStateNonce(app.io, res.arena);
     const code_verifier = try oauth2.createStateNonce(app.io, res.arena);
-    const url = try app.coinbase.createAuthorizationUrl(res.arena, state, code_verifier, &[_][]const u8{ "wallet:user:read", "wallet:user:email" });
+    const url = try app.coinbase.createAuthorizationUrl(res.arena, state, code_verifier, &[_][]const u8{ "wallet:user:read", "wallet:user:email" }, &.{});
 
     const session_id = try oauth2.createStateNonce(app.io, res.arena);
     try app.session_store.put(session_id, SessionData{
@@ -105,9 +105,10 @@ fn handleCallback(app: *App, req: *httpz.Request, res: *httpz.Response) !void {
         return res.setStatus(.bad_request);
     }
 
-    const tokens = try app.coinbase.validateAuthorizationCode(res.arena, code, session_data.value.code_verifier);
+    var tokens = try app.coinbase.validateAuthorizationCode(res.arena, code, session_data.value.code_verifier, &.{});
+    defer tokens.deinit();
 
-    const user_profile = try getUserProfile(app.io, res.arena, "https://api.coinbase.com/v2/user", tokens.access_token);
+    const user_profile = try getUserProfile(app.io, res.arena, "https://api.coinbase.com/v2/user", tokens.parsed.?.value.access_token);
 
     return res.json(user_profile.value, .{});
 }

@@ -95,9 +95,10 @@ fn handleLogin(app: *App, _: *httpz.Request, res: *httpz.Response) !void {
         res.arena,
         "https://accounts.google.com/o/oauth2/v2/auth",
         state,
-        "S256",
+        .S256,
         code_verifier,
         &[_][]const u8{ "email", "profile", "openid" },
+        &.{}, // extra query parameters, if your provider wants any
     );
 
     const session_id = try oauth2.createStateNonce(app.io, res.arena);
@@ -153,7 +154,26 @@ fn handleCallback(app: *App, req: *httpz.Request, res: *httpz.Response) !void {
         return res.setStatus(.bad_request);
     }
 
-    return res.json(try app.oauth.validateAuthorizationCode(GoogleTokenResponse, res.arena, "https://oauth2.googleapis.com/token", code, session.code_verifier), .{});
+    var tokens = try app.oauth.validateAuthorizationCode(
+        GoogleTokenResponse,
+        res.arena,
+        "https://oauth2.googleapis.com/token",
+        code,
+        session_data.value.code_verifier,
+        &.{}, // extra form parameters, if your provider wants any
+    );
+    defer tokens.deinit();
+
+    // A token endpoint reports failure as an OAuth error document, sometimes
+    // with a 400 and sometimes (GitHub does this) with a 200. Either way it
+    // arrives here rather than as a Zig error.
+    if (tokens.oauthError()) |err| {
+        std.log.err("{s}: {s}", .{ err.code, err.description orelse "no description" });
+        return res.setStatus(.bad_request);
+    }
+
+    const parsed = tokens.parsed orelse return res.setStatus(.bad_gateway);
+    return res.json(parsed.value, .{});
 }
 
 // This is the response we expect to get back when validating the authorization code
@@ -166,3 +186,47 @@ pub const GoogleTokenResponse = struct {
     id_token: []const u8,
 };
 ```
+
+#### Token responses
+
+`validateAuthorizationCode` and `refreshAccessToken` hand back an `oauth2.Response(T)`
+rather than a bare `T`. It owns everything it points at, so it needs a `deinit`:
+
+```zig
+var tokens = try provider.validateAuthorizationCode(MyTokens, allocator, TOKEN_URL, code, verifier, &.{});
+defer tokens.deinit();
+
+if (tokens.oauthError()) |err| { /* err.code, err.description */ }
+if (tokens.parsed) |parsed| { /* parsed.value.access_token */ }
+```
+
+- `status` is what the endpoint answered with.
+- `parsed` is your `T`, or null when the body was not one - an error document, say.
+- `oauthError()` reads the RFC 6749 `error` / `error_description` pair out of the
+  body. Worth checking even on a 200: not every provider uses the status code to
+  say no.
+
+#### Extra parameters
+
+Every URL builder and token call takes a trailing `extra_params` slice, for the
+parameters a particular provider or spec asks for that this library does not
+model. RFC 8707 resource indicators, for instance:
+
+```zig
+const url = try provider.createAuthorizationUrlWithPKCE(
+    allocator, AUTH_URL, state, .S256, verifier, scopes,
+    &.{.{ .key = "resource", .value = "https://api.example/mcp" }},
+);
+```
+
+They are URL- or form-encoded like everything else, so pass them raw.
+
+#### Client authentication
+
+RFC 6749 says a client authenticates one way, never two. So:
+
+- With a `client_secret`, requests use HTTP Basic.
+- With an empty `client_secret`, the client is public and identifies itself with
+  `client_id` in the request body alone. This is the shape a desktop or CLI app
+  wants, and it is why PKCE matters there rather than being belt-and-braces.
+

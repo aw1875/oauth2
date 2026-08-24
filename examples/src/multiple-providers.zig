@@ -18,8 +18,8 @@ const OAuthProvider = enum {
 };
 
 const TokenResponse = union(enum) {
-    discord: oauth2.DiscordProvider.DiscordTokenResponse,
-    github: oauth2.GitHubProvider.GitHubTokenResponse,
+    discord: oauth2.Response(oauth2.DiscordProvider.DiscordTokenResponse),
+    github: oauth2.Response(oauth2.GitHubProvider.GitHubTokenResponse),
 };
 
 pub fn main(init: std.process.Init) !void {
@@ -86,8 +86,8 @@ fn handleLogin(app: *App, req: *httpz.Request, res: *httpz.Response) !void {
 
     const state = try oauth2.createStateNonce(app.io, res.arena);
     const url = switch (std.meta.stringToEnum(OAuthProvider, provider) orelse OAuthProvider.unknown) {
-        .discord => try app.discord.createAuthorizationUrl(res.arena, state, &[_][]const u8{ "identify", "email" }),
-        .github => try app.github.createAuthorizationUrl(res.arena, state, &[_][]const u8{ "read:user", "user:email" }),
+        .discord => try app.discord.createAuthorizationUrl(res.arena, state, &[_][]const u8{ "identify", "email" }, &.{}),
+        .github => try app.github.createAuthorizationUrl(res.arena, state, &[_][]const u8{ "read:user", "user:email" }, &.{}),
         .unknown => return res.setStatus(.not_found),
     };
 
@@ -144,15 +144,19 @@ fn handleCallback(app: *App, req: *httpz.Request, res: *httpz.Response) !void {
         return res.setStatus(.bad_request);
     }
 
-    const tokens: TokenResponse = switch (std.meta.stringToEnum(OAuthProvider, provider) orelse OAuthProvider.unknown) {
-        .discord => .{ .discord = try app.discord.validateAuthorizationCode(res.arena, code) },
-        .github => .{ .github = try app.github.validateAuthorizationCode(res.arena, code) },
+    var tokens: TokenResponse = switch (std.meta.stringToEnum(OAuthProvider, provider) orelse OAuthProvider.unknown) {
+        .discord => .{ .discord = try app.discord.validateAuthorizationCode(res.arena, code, &.{}) },
+        .github => .{ .github = try app.github.validateAuthorizationCode(res.arena, code, &.{}) },
         .unknown => return res.setStatus(.not_found),
+    };
+    defer switch (tokens) {
+        .discord => |*t| t.deinit(),
+        .github => |*t| t.deinit(),
     };
 
     const user_profile = switch (std.meta.stringToEnum(OAuthProvider, provider) orelse OAuthProvider.unknown) {
-        .discord => try getUserProfile(app.io, res.arena, "https://discord.com/api/users/@me", tokens.discord.access_token),
-        .github => try getUserProfile(app.io, res.arena, "https://api.github.com/user", tokens.github.access_token),
+        .discord => try getUserProfile(app.io, res.arena, "https://discord.com/api/users/@me", tokens.discord.parsed.?.value.access_token),
+        .github => try getUserProfile(app.io, res.arena, "https://api.github.com/user", tokens.github.parsed.?.value.access_token),
         .unknown => return res.setStatus(.not_found),
     };
 
