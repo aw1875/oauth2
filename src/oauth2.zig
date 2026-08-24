@@ -149,6 +149,7 @@ pub fn revokeAccessToken(
 }
 
 fn createBasicAuthHeader(self: *const OAuth2Provider, allocator: std.mem.Allocator) ![]const u8 {
+    if (self.client_secret.len == 0) return "";
     const auth_string = try std.fmt.allocPrint(allocator, "{s}:{s}", .{ self.client_id, self.client_secret });
     const auth_encoded = try allocator.alloc(u8, std.base64.standard.Encoder.calcSize(auth_string.len));
     _ = std.base64.standard.Encoder.encode(auth_encoded, auth_string);

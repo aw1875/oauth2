@@ -26,7 +26,7 @@ pub fn post(self: *HttpClient, comptime R: type, url: []const u8, body_data: []c
         .location = .{ .url = url },
         .method = .POST,
         .headers = .{
-            .authorization = .{ .override = auth },
+            .authorization = if (auth.len == 0) .omit else .{ .override = auth },
             .content_type = .{ .override = "application/x-www-form-urlencoded" },
         },
         .payload = body_data,
